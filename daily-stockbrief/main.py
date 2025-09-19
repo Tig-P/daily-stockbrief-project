@@ -2,7 +2,8 @@ import asyncio
 import json
 import os
 import re
-from datetime import datetime, date
+import shutil
+from datetime import datetime, date, timedelta
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 BASE_URL = "https://stock.mk.co.kr/news/media/infostock"
@@ -23,6 +24,18 @@ def to_abs(url: str) -> str:
     if not url:
         return ""
     return url if url.startswith("http") else f"https://stock.mk.co.kr{url}"
+
+def get_last_weekday_folder(base_path):
+    """public/data/에서 가장 최근 평일 폴더 반환"""
+    today = datetime.today()
+    for delta in range(1, 8):  # 최대 7일 뒤로 탐색
+        check_day = today - timedelta(days=delta)
+        if check_day.weekday() < 5:  # 평일만
+            folder_name = check_day.strftime("%Y-%m-%d")
+            candidate = os.path.join(base_path, folder_name)
+            if os.path.exists(candidate):
+                return candidate
+    return None
 
 # ---------- 공통: 페이지네이션으로 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
@@ -151,43 +164,43 @@ async def scrape_themes(context, url: str, date_str: str):
 # ---------- 메인 ----------
 async def main():
     today_dash = datetime.now().strftime("%Y-%m-%d")
+    today_folder = os.path.join(WEB_DATA_PATH, today_dash)
+    os.makedirs(today_folder, exist_ok=True)
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
 
-        # (6) 상한가/급등종목
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         g_title, g_url = await find_today_article(context, page, ["증시요약(6)", "상한가", "급등"], max_pages=5)
-        gainers = []
-        if g_url:
-            print(f"[INFO] (6) 오늘 기사: {g_title} -> {g_url}")
-            gainers = await scrape_gainers(context, g_url, today_dash)
-        else:
-            print("[WARN] 오늘자 (6) 상한가/급등 기사 미발견")
 
-        # (3) 특징 테마
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         t_title, t_url = await find_today_article(context, page, ["증시요약(3)", "특징"], max_pages=5)
-        themes = []
-        if t_url:
-            print(f"[INFO] (3) 오늘 기사: {t_title} -> {t_url}")
-            themes = await scrape_themes(context, t_url, today_dash)
-        else:
-            print("[WARN] 오늘자 (3) 특징 테마 기사 미발견")
 
-        # 오늘 날짜 폴더 생성
-        output_dir = os.path.join(WEB_DATA_PATH, today_dash)
-        os.makedirs(output_dir, exist_ok=True)
+        if not g_url and not t_url:
+            # 오늘 기사 없으면 → 주말 모드
+            last_weekday_folder = get_last_weekday_folder(WEB_DATA_PATH)
+            if last_weekday_folder:
+                print(f"[INFO] 오늘 기사 없음 → {last_weekday_folder} 데이터 복사")
+                for file_name in ["infostock_gainers.json", "infostock_themes.json"]:
+                    src = os.path.join(last_weekday_folder, file_name)
+                    dst = os.path.join(today_folder, file_name)
+                    if os.path.exists(src):
+                        shutil.copy(src, dst)
+                await browser.close()
+                return
 
-        # JSON 저장
-        with open(os.path.join(output_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
+        gainers = await scrape_gainers(context, g_url, today_dash) if g_url else []
+        themes = await scrape_themes(context, t_url, today_dash) if t_url else []
+
+        with open(os.path.join(today_folder, "infostock_gainers.json"), "w", encoding="utf-8") as f:
             json.dump(gainers, f, ensure_ascii=False, indent=2)
-        print(f"[SAVE] {len(gainers)}개 (상한가/급등) → {output_dir}")
-
-        with open(os.path.join(output_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(today_folder, "infostock_themes.json"), "w", encoding="utf-8") as f:
             json.dump(themes, f, ensure_ascii=False, indent=2)
-        print(f"[SAVE] {len(themes)}개 (특징 테마) → {output_dir}")
+
+        print(f"[SAVE] {len(gainers)}개 (상한가/급등) → {today_folder}")
+        print(f"[SAVE] {len(themes)}개 (특징 테마) → {today_folder}")
 
         await browser.close()
 
