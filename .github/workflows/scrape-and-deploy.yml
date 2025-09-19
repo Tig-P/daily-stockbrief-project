@@ -31,8 +31,10 @@ jobs:
 
       - name: Commit & Push changes
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add daily-stockbrief-web/public/data || echo "No changes"
           git commit -m "Auto-update data $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push
+          git pull --rebase origin main || echo "No rebase needed"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
