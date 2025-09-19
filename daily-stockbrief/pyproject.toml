@@ -1,0 +1,13 @@
+[project]
+name = "daily-stockbrief"
+version = "0.1.0"
+description = "MK Infostock daily scraper"
+authors = [{ name = "HAE WOONG GANG" }]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "playwright>=1.47", # 최신 Playwright
+]
+
+[tool.uv]
