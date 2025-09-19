@@ -1,7 +1,8 @@
-import fs from "fs";
-import path from "path";
+"use client";
 
-type Gainer = {
+import { useEffect, useState } from "react";
+
+type GainerItem = {
   name: string;
   code: string;
   reason: string;
@@ -11,82 +12,65 @@ type GainerData = {
   title: string;
   url: string;
   date: string;
-  items: Gainer[];
-};
+  items: GainerItem[];
+}[];
 
 type ThemeData = {
   title: string;
   url: string;
   date: string;
   body: string;
-};
+}[];
 
-// 서버에서 JSON 읽기
-async function getData() {
-  const today = new Date().toISOString().split("T")[0];
-  const gainersPath = path.join(process.cwd(), "public", "data", `infostock_gainers_${today}.json`);
-  const themesPath = path.join(process.cwd(), "public", "data", `infostock_themes_${today}.json`);
+export default function Home() {
+  const [gainers, setGainers] = useState<GainerData>([]);
+  const [themes, setThemes] = useState<ThemeData>([]);
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
-  let gainers: GainerData[] = [];
-  let themes: ThemeData[] = [];
-
-  try {
-    const rawGainers = fs.readFileSync(gainersPath, "utf-8");
-    gainers = JSON.parse(rawGainers);
-  } catch (err) {
-    console.warn("[WARN] 오늘자 상한가/급등 JSON 파일 없음");
-  }
-
-  try {
-    const rawThemes = fs.readFileSync(themesPath, "utf-8");
-    themes = JSON.parse(rawThemes);
-  } catch (err) {
-    console.warn("[WARN] 오늘자 테마 JSON 파일 없음");
-  }
-
-  return { gainers, themes };
-}
-
-function cleanTitle(title: string) {
-  return title.replace(/\s*\(증시요약\(\d+\)\)/, "");
-}
-
-export default async function Home() {
-  const { gainers, themes } = await getData();
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const gainersRes = await fetch(`/data/${today}/infostock_gainers.json`);
+        if (gainersRes.ok) {
+          setGainers(await gainersRes.json());
+        }
+        const themesRes = await fetch(`/data/${today}/infostock_themes.json`);
+        if (themesRes.ok) {
+          setThemes(await themesRes.json());
+        }
+      } catch (err) {
+        console.error("데이터 로드 실패:", err);
+      }
+    };
+    fetchData();
+  }, [today]);
 
   return (
-    <main className="p-6 max-w-3xl mx-auto">
-      {gainers.length > 0 ? (
-        <section className="mb-10">
-          <h1 className="text-xl font-bold mb-4">
-            {cleanTitle(gainers[0].title)}
-          </h1>
-          <ul className="space-y-2">
-            {gainers[0].items.map((item, idx) => (
-              <li key={idx} className="border p-3 rounded-lg">
-                <div className="font-semibold">
-                  {item.name} ({item.code})
-                </div>
-                <p className="text-gray-700 text-sm">{item.reason}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
+    <main className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">📈 상한가 및 급등주</h1>
+      {gainers.length === 0 ? (
+        <p className="text-gray-500">오늘 데이터가 없습니다.</p>
       ) : (
-        <p className="text-gray-500">오늘 상한가/급등 종목 데이터가 없습니다.</p>
+        gainers[0].items.map((item, i) => (
+          <div key={i} className="border-b border-gray-200 py-3">
+            <h2 className="text-lg font-semibold">
+              {item.name} ({item.code})
+            </h2>
+            <p className="text-sm text-gray-700">{item.reason}</p>
+          </div>
+        ))
       )}
 
-      {themes.length > 0 ? (
-        <section>
-          <h1 className="text-xl font-bold mb-4">
-            {cleanTitle(themes[0].title)}
-          </h1>
-          <p className="whitespace-pre-line text-gray-800">{themes[0].body}</p>
-        </section>
+      <h1 className="text-2xl font-bold mt-8 mb-4">📝 특징 테마</h1>
+      {themes.length === 0 ? (
+        <p className="text-gray-500">오늘 데이터가 없습니다.</p>
       ) : (
-        <p className="text-gray-500">오늘 특징 테마 데이터가 없습니다.</p>
+        <div className="bg-gray-50 p-4 rounded-lg shadow">
+          <p className="whitespace-pre-line text-sm leading-relaxed">
+            {themes[0].body}
+          </p>
+        </div>
       )}
     </main>
   );
 }
-
