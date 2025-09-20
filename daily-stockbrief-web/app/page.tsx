@@ -6,7 +6,7 @@ type GainerItem = {
   name: string;
   code: string;
   price: string;
-  change: string;
+  change?: string; // change가 없을 수도 있음
   reason: string;
 };
 
@@ -24,19 +24,22 @@ type ThemeData = {
   body: string;
 }[];
 
-function formatPrice(price: string) {
+function formatPrice(price?: string) {
+  if (!price) return "-";
   const num = parseInt(price.replace(/[^0-9]/g, ""), 10);
   if (isNaN(num)) return price;
   return num.toLocaleString("ko-KR");
 }
 
-function getChangeColor(change: string) {
+function getChangeColor(change?: string) {
+  if (!change) return "text-gray-700";
   if (change.startsWith("+")) return "text-red-500";
   if (change.startsWith("-")) return "text-blue-500";
   return "text-gray-700";
 }
 
-function getArrow(change: string) {
+function getArrow(change?: string) {
+  if (!change) return "";
   if (change.startsWith("+")) return "▲";
   if (change.startsWith("-")) return "▼";
   return "";
@@ -88,7 +91,7 @@ export default function Home() {
   return (
     <main className="p-6 max-w-6xl mx-auto relative">
       {/* 🔹 항상 우측 상단 고정 contact */}
-      <div className="fixed top-4 right-4 text-xs text-gray-500 bg-white/70 px-2 py-1 rounded shadow z-50">
+      <div className="fixed top-4 right-4 text-xs text-gray-700 bg-white/70 px-2 py-1 rounded shadow z-50">
         contact: enomme@naver.com
       </div>
 
@@ -106,7 +109,7 @@ export default function Home() {
               </h2>
               <span className={`text-sm font-bold ${getChangeColor(item.change)}`}>
                 {formatPrice(item.price)}원 {getArrow(item.change)}
-                {item.change}
+                {item.change ?? ""}
               </span>
             </div>
 
