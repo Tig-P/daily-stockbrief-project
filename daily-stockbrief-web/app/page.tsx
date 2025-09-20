@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { Chart, registerables } from "chart.js";
+Chart.register(...registerables);
 
 type GainerItem = {
   name: string;
@@ -49,6 +51,8 @@ export default function Home() {
   const [gainers, setGainers] = useState<GainerData>([]);
   const [themes, setThemes] = useState<ThemeData>([]);
   const [openCharts, setOpenCharts] = useState<string[]>([]);
+  const [chartType, setChartType] = useState<"day" | "week" | "month" | "1" | "5" | "10">("day");
+  const chartRefs = useRef<{ [key: string]: Chart }>({});
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -71,22 +75,86 @@ export default function Home() {
     if (saved) setOpenCharts(JSON.parse(saved));
   }, []);
 
-  const toggleChart = (code: string) => {
+  const getFChartUrl = (code: string) => {
+    // 일봉, 주봉, 월봉, 분봉
+    if (chartType === "day") return `https://fchart.stock.naver.com/siseJson.naver?symbol=${code}&requestType=0&timeframe=day`;
+    if (chartType === "week") return `https://fchart.stock.naver.com/siseJson.naver?symbol=${code}&requestType=0&timeframe=week`;
+    if (chartType === "month") return `https://fchart.stock.naver.com/siseJson.naver?symbol=${code}&requestType=0&timeframe=month`;
+    // 분봉
+    return `https://fchart.stock.naver.com/siseJson.naver?symbol=${code}&requestType=1&timeframe=${chartType}`;
+  };
+
+  const toggleChart = async (item: GainerItem) => {
     setOpenCharts((prev) => {
       let updated;
-      if (prev.includes(code)) {
-        updated = prev.filter((c) => c !== code);
+      if (prev.includes(item.code)) {
+        chartRefs.current[item.code]?.destroy();
+        updated = prev.filter((c) => c !== item.code);
       } else {
-        updated = [...prev, code];
+        updated = [...prev, item.code];
       }
       localStorage.setItem("openCharts", JSON.stringify(updated));
       return updated;
     });
+
+    if (!openCharts.includes(item.code)) {
+      await fetchChartData(item.code);
+    }
+  };
+
+  const fetchChartData = async (code: string) => {
+    try {
+      const res = await fetch(getFChartUrl(code));
+      const text = await res.text();
+      const jsonText = text.replace(/^[^\[]+|\;$/g, "");
+      const data = JSON.parse(jsonText);
+
+      const dates: string[] = [];
+      const prices: number[] = [];
+      for (const item of data[1]) {
+        dates.push(item[0]);
+        prices.push(Number(item[4]));
+      }
+
+      const ctx = document.getElementById(`chart-${code}`) as HTMLCanvasElement;
+      if (!ctx) return;
+
+      chartRefs.current[code]?.destroy();
+      const chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: dates.reverse(),
+          datasets: [
+            {
+              label: `${code} 종가`,
+              data: prices.reverse(),
+              borderColor: "rgb(34,197,94)",
+              backgroundColor: "rgba(34,197,94,0.2)",
+              tension: 0.2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { display: false }, tooltip: { mode: "index" } },
+          scales: { x: { display: true }, y: { display: true } },
+        },
+      });
+      chartRefs.current[code] = chart;
+    } catch (err) {
+      console.error("차트 데이터 로드 실패:", err);
+    }
+  };
+
+  const changeChartType = (type: "day" | "week" | "month" | "1" | "5" | "10", code: string) => {
+    setChartType(type);
+    fetchChartData(code);
   };
 
   return (
     <main className="p-6 max-w-6xl mx-auto relative">
-      {/* 항상 우측 상단 고정 contact */}
       <div className="fixed top-4 right-4 text-xs text-gray-700 bg-white/70 px-2 py-1 rounded shadow z-50">
         contact: enomme@naver.com
       </div>
@@ -98,7 +166,6 @@ export default function Home() {
       ) : (
         gainers[0].items.map((item, i) => (
           <div key={i} className="border-b border-gray-200 py-5">
-            {/* 종목명 & 가격 */}
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">
                 {item.name} ({item.code})
@@ -111,7 +178,6 @@ export default function Home() {
 
             <p className="text-sm text-gray-700 mt-1">{item.reason}</p>
 
-            {/* 버튼 영역 */}
             <div className="flex gap-2 mt-3">
               <a
                 href={`https://finance.naver.com/item/main.naver?code=${item.code}`}
@@ -122,26 +188,41 @@ export default function Home() {
                 네이버 금융
               </a>
               <button
-                onClick={() => toggleChart(item.code)}
+                onClick={() => toggleChart(item)}
                 className="bg-blue-500 text-white px-3 py-1 rounded-md text-xs hover:bg-blue-600"
               >
                 {openCharts.includes(item.code) ? "차트 닫기" : "차트 보기"}
               </button>
             </div>
 
-            {/* 차트 표시 */}
             {openCharts.includes(item.code) && (
-              <div
-                className="mt-3 overflow-auto rounded-md border"
-                style={{ WebkitOverflowScrolling: "touch", maxHeight: "80vh" }}
-              >
-                <iframe
-                  src={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
-                  title={`${item.name} 차트`}
-                  className="w-full h-[400px] md:h-80 border-0"
-                  style={{ minHeight: "300px" }}
-                />
-              </div>
+              <>
+                {/* 기간 선택 버튼 */}
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {[
+                    { label: "일봉", type: "day" },
+                    { label: "주봉", type: "week" },
+                    { label: "월봉", type: "month" },
+                    { label: "1분", type: "1" },
+                    { label: "5분", type: "5" },
+                    { label: "10분", type: "10" },
+                  ].map((b) => (
+                    <button
+                      key={b.type}
+                      className={`px-2 py-1 rounded text-xs ${
+                        chartType === b.type ? "bg-blue-600 text-white" : "bg-gray-200"
+                      }`}
+                      onClick={() => changeChartType(b.type as any, item.code)}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 h-[400px] md:h-80">
+                  <canvas id={`chart-${item.code}`} className="w-full h-full" />
+                </div>
+              </>
             )}
           </div>
         ))
