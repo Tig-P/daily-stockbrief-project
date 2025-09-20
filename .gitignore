@@ -1,4 +1,4 @@
-﻿# Node
+# Node
 node_modules/
 .next/
 dist/
@@ -7,7 +7,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Python
+# Python (main.py, venv)
 __pycache__/
 *.pyc
 .venv/
@@ -17,11 +17,15 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# VSCode
+# Logs
+*.log
+
+# VS Code settings (optional)
 .vscode/
 
-# Build output
+# Ignore build output
 out/
 build/
 
-# ✅ public/data는 추적해야 하므로 무시 금지!
+# ✅ BUT keep public/data JSON files for history tracking
+# (절대 public/data 폴더 전체를 무시하지 말 것!)

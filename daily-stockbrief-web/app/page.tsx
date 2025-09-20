@@ -86,7 +86,12 @@ export default function Home() {
   };
 
   return (
-    <main className="p-6 max-w-6xl mx-auto">
+    <main className="p-6 max-w-6xl mx-auto relative">
+      {/* 🔹 항상 우측 상단 고정 contact */}
+      <div className="fixed top-4 right-4 text-xs text-gray-500 bg-white/70 px-2 py-1 rounded shadow z-50">
+        contact: enomme@naver.com
+      </div>
+
       <h1 className="text-2xl font-bold mb-6">📈 상한가 및 급등주</h1>
 
       {gainers.length === 0 ? (
@@ -144,13 +149,9 @@ export default function Home() {
         <p className="text-gray-500">오늘 데이터가 없습니다.</p>
       ) : (
         <div className="bg-gray-50 p-4 rounded-lg shadow">
-          <p className="whitespace-pre-line text-sm leading-relaxed">
-            {themes[0].body}
-          </p>
+          <p className="whitespace-pre-line text-sm leading-relaxed">{themes[0].body}</p>
         </div>
       )}
     </main>
   );
 }
-
-
