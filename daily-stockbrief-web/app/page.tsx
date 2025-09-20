@@ -6,7 +6,7 @@ type GainerItem = {
   name: string;
   code: string;
   price: string;
-  change?: string; // change가 없을 수도 있음
+  change?: string;
   reason: string;
 };
 
@@ -66,15 +66,11 @@ export default function Home() {
     fetchData();
   }, [today]);
 
-  // 🔥 localStorage에서 차트 열림 상태 복구
   useEffect(() => {
     const saved = localStorage.getItem("openCharts");
-    if (saved) {
-      setOpenCharts(JSON.parse(saved));
-    }
+    if (saved) setOpenCharts(JSON.parse(saved));
   }, []);
 
-  // 🔥 차트 열기/닫기 toggle + 저장
   const toggleChart = (code: string) => {
     setOpenCharts((prev) => {
       let updated;
@@ -90,7 +86,7 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto relative">
-      {/* 🔹 항상 우측 상단 고정 contact */}
+      {/* 항상 우측 상단 고정 contact */}
       <div className="fixed top-4 right-4 text-xs text-gray-700 bg-white/70 px-2 py-1 rounded shadow z-50">
         contact: enomme@naver.com
       </div>
@@ -135,11 +131,15 @@ export default function Home() {
 
             {/* 차트 표시 */}
             {openCharts.includes(item.code) && (
-              <div className="mt-3">
+              <div
+                className="mt-3 overflow-auto rounded-md border"
+                style={{ WebkitOverflowScrolling: "touch", maxHeight: "80vh" }}
+              >
                 <iframe
                   src={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
                   title={`${item.name} 차트`}
-                  className="w-full h-80 border rounded-md"
+                  className="w-full h-[400px] md:h-80 border-0"
+                  style={{ minHeight: "300px" }}
                 />
               </div>
             )}

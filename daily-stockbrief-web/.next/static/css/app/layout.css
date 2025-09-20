@@ -542,6 +542,9 @@ video {
 .h-80 {
   height: 20rem;
 }
+.h-\[400px\] {
+  height: 400px;
+}
 .w-full {
   width: 100%;
 }
@@ -557,6 +560,9 @@ video {
 .gap-2 {
   gap: 0.5rem;
 }
+.overflow-auto {
+  overflow: auto;
+}
 .whitespace-pre-line {
   white-space: pre-line;
 }
@@ -571,6 +577,9 @@ video {
 }
 .border {
   border-width: 1px;
+}
+.border-0 {
+  border-width: 0px;
 }
 .border-b {
   border-bottom-width: 1px;
@@ -693,5 +702,12 @@ body {
 .hover\:bg-green-600:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(22 163 74 / var(--tw-bg-opacity, 1));
+}
+
+@media (min-width: 768px) {
+
+  .md\:h-80 {
+    height: 20rem;
+  }
 }
 
