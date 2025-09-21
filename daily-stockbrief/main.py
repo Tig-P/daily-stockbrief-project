@@ -2,43 +2,32 @@ import asyncio
 import json
 import os
 import re
-import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 BASE_URL = "https://stock.mk.co.kr/news/media/infostock"
 WEB_DATA_PATH = "../daily-stockbrief-web/public/data"  # Next.js public/data 경로
 
-# ---------- 로깅 설정 ----------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-
 # ---------- 유틸 ----------
 def today_markers() -> list[str]:
-    """KST(한국 표준시) 기준 오늘 날짜 문자열 포맷 여러 가지"""
-    now = datetime.now(ZoneInfo("Asia/Seoul"))
-    y, m, d = now.year, f"{now.month:02d}", f"{now.day:02d}"
+    now = datetime.now()
+    y = now.year
+    m = f"{now.month:02d}"
+    d = f"{now.day:02d}"
     return [f"{y}-{m}-{d}", f"{y}.{m}.{d}", f"{y}/{m}/{d}"]
 
 def clean_title(title: str) -> str:
-    """(증시요약(숫자)) 꼬리표 제거"""
     return re.sub(r"\s*\(증시요약\(\d+\)\)", "", title).strip()
 
 def to_abs(url: str) -> str:
-    """상대 URL → 절대 URL"""
     if not url:
         return ""
     return url if url.startswith("http") else f"https://stock.mk.co.kr{url}"
 
 # ---------- 공통: 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
-    """오늘 날짜 + required_subs 조건을 만족하는 첫 기사 (제목, URL) 반환"""
     marks = today_markers()
     page = start_page
-
     for page_no in range(1, max_pages + 1):
         anchors = await page.locator("a").all()
         candidates = []
@@ -57,19 +46,19 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
             try:
                 await news.goto(url, wait_until="domcontentloaded", timeout=45000)
                 date_loc = news.locator(".news_date, .date, span.date, .info_date")
+                date_txt = ""
                 try:
                     date_txt = (await date_loc.first.inner_text(timeout=5000)).strip()
                 except Exception:
-                    date_txt = ""
+                    pass
                 if any(mark in date_txt for mark in marks):
-                    logging.info(f"[MATCH] {raw_title} (date={date_txt})")
+                    await news.close()
                     return clean_title(raw_title), url
             except PlaywrightTimeoutError:
-                logging.warning(f"[TIMEOUT] {url}")
+                pass
             finally:
                 await news.close()
 
-        # 다음 페이지 이동
         next_btn = page.locator("a.next, a.paging_next, a:has-text('다음')")
         if page_no == max_pages or await next_btn.count() == 0:
             break
@@ -110,12 +99,23 @@ async def scrape_gainers(context, url: str, date_str: str):
                     pass
 
             if name and code and reason:
-                items.append({"name": name, "code": code, "price": price, "change": change, "reason": reason})
+                items.append({
+                    "name": name,
+                    "code": code,
+                    "price": price,
+                    "change": change,
+                    "reason": reason
+                })
         except Exception:
             continue
 
     await page.close()
-    return [{"title": "상한가/급등종목", "url": url, "date": date_str, "items": items}]
+    return [{
+        "title": "상한가/급등종목",
+        "url": url,
+        "date": date_str,
+        "items": items
+    }]
 
 # ---------- (3) 특징 테마 ----------
 async def scrape_themes(context, url: str, date_str: str):
@@ -143,48 +143,58 @@ async def scrape_themes(context, url: str, date_str: str):
                 continue
 
     await page.close()
-    return [{"title": "특징 테마", "url": url, "date": date_str, "body": "\n".join(body_lines)}]
+    return [{
+        "title": "특징 테마",
+        "url": url,
+        "date": date_str,
+        "body": "\n".join(body_lines)
+    }]
 
 # ---------- 메인 ----------
 async def main():
-    today_dash = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d")
-    today_dir = os.path.join(WEB_DATA_PATH, today_dash)
-    os.makedirs(today_dir, exist_ok=True)
-    logging.info(f"[DIR] Output directory: {os.path.abspath(today_dir)}")
+    today_dash = datetime.now().strftime("%Y-%m-%d")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
 
-        # (6) 상한가/급등
+        # (6) 상한가/급등종목
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         g_title, g_url = await find_today_article(context, page, ["증시요약(6)", "상한가", "급등"], max_pages=5)
         gainers = []
         if g_url:
-            logging.info(f"[INFO] (6) {g_title} -> {g_url}")
+            print(f"[INFO] (6) 오늘 기사: {g_title} -> {g_url}")
             gainers = await scrape_gainers(context, g_url, today_dash)
         else:
-            logging.warning("[WARN] 오늘자 (6) 상한가/급등 기사 미발견")
+            print("[WARN] 오늘자 (6) 상한가/급등 기사 미발견")
 
         # (3) 특징 테마
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         t_title, t_url = await find_today_article(context, page, ["증시요약(3)", "특징"], max_pages=5)
         themes = []
         if t_url:
-            logging.info(f"[INFO] (3) {t_title} -> {t_url}")
+            print(f"[INFO] (3) 오늘 기사: {t_title} -> {t_url}")
             themes = await scrape_themes(context, t_url, today_dash)
         else:
-            logging.warning("[WARN] 오늘자 (3) 특징 테마 기사 미발견")
+            print("[WARN] 오늘자 (3) 특징 테마 기사 미발견")
 
-        # 저장
-        with open(os.path.join(today_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
-            json.dump(gainers, f, ensure_ascii=False, indent=2)
-        logging.info(f"[SAVE] {len(gainers)}개 (상한가/급등) → {today_dir}")
+        # ✅ 기사 없으면 저장 안 함
+        if gainers or themes:
+            today_dir = os.path.join(WEB_DATA_PATH, today_dash)
+            os.makedirs(today_dir, exist_ok=True)
 
-        with open(os.path.join(today_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
-            json.dump(themes, f, ensure_ascii=False, indent=2)
-        logging.info(f"[SAVE] {len(themes)}개 (특징 테마) → {today_dir}")
+            if gainers:
+                with open(os.path.join(today_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
+                    json.dump(gainers, f, ensure_ascii=False, indent=2)
+                print(f"[SAVE] {len(gainers)}개 (상한가/급등) → {today_dir}")
+
+            if themes:
+                with open(os.path.join(today_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
+                    json.dump(themes, f, ensure_ascii=False, indent=2)
+                print(f"[SAVE] {len(themes)}개 (특징 테마) → {today_dir}")
+        else:
+            print("[INFO] 오늘은 저장할 데이터 없음. 폴더 생성 안 함.")
 
         await browser.close()
 
