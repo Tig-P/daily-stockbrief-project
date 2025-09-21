@@ -48,23 +48,36 @@ function getArrow(change: string | undefined) {
 export default function Home() {
   const [gainers, setGainers] = useState<GainerData>([]);
   const [themes, setThemes] = useState<ThemeData[]>([]);
+  const [dateUsed, setDateUsed] = useState<string>(""); // 실제 표시할 날짜
   const [openCharts, setOpenCharts] = useState<string[]>([]);
-  const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const gainersRes = await fetch(`/data/${today}/infostock_gainers.json`);
-        if (gainersRes.ok) setGainers(await gainersRes.json());
+    const tryDates = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split("T")[0];
+    });
 
-        const themesRes = await fetch(`/data/${today}/infostock_themes.json`);
-        if (themesRes.ok) setThemes(await themesRes.json());
-      } catch (err) {
-        console.error("데이터 로드 실패:", err);
+    const fetchData = async () => {
+      for (const date of tryDates) {
+        try {
+          const gainersRes = await fetch(`/data/${date}/infostock_gainers.json`);
+          const themesRes = await fetch(`/data/${date}/infostock_themes.json`);
+
+          if (gainersRes.ok || themesRes.ok) {
+            if (gainersRes.ok) setGainers(await gainersRes.json());
+            if (themesRes.ok) setThemes(await themesRes.json());
+            setDateUsed(date);
+            return;
+          }
+        } catch (err) {
+          console.error("데이터 로드 실패:", err);
+        }
       }
     };
+
     fetchData();
-  }, [today]);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("openCharts");
@@ -86,22 +99,20 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto">
-      {/* 안내 문구 & 날짜 */}
       <p className="text-sm text-gray-500 mb-2 text-center">
         ⏰ 본 데이터는 매일 장 마감 후 17:00~18:00 사이 자동 업데이트됩니다.
       </p>
       <h1 className="text-3xl font-extrabold mb-6 text-center">
-        📅 {today} 장 마감 브리핑
+        📅 {dateUsed || "최근 데이터"} 장 마감 브리핑
       </h1>
 
       <h2 className="text-2xl font-bold mb-6">📈 상한가 및 급등주</h2>
 
       {gainers.length === 0 ? (
-        <p className="text-gray-500">오늘 데이터가 없습니다.</p>
+        <p className="text-gray-500">최근 14일 내 데이터가 없습니다.</p>
       ) : (
         gainers[0].items.map((item, i) => (
           <div key={i} className="border-b border-gray-200 py-5">
-            {/* 종목명 & 가격 */}
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">
                 {item.name} ({item.code})
@@ -116,7 +127,6 @@ export default function Home() {
 
             <p className="text-sm text-gray-700 mt-1">{item.reason}</p>
 
-            {/* 버튼 영역 */}
             <div className="flex gap-2 mt-3">
               <a
                 href={`https://finance.naver.com/item/main.naver?code=${item.code}`}
@@ -134,7 +144,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 차트 */}
             {openCharts.includes(item.code) && (
               <div className="mt-3">
                 <iframe
@@ -150,7 +159,7 @@ export default function Home() {
 
       <h2 className="text-2xl font-bold mt-10 mb-4">📝 특징 테마</h2>
       {themes.length === 0 ? (
-        <p className="text-gray-500">오늘 데이터가 없습니다.</p>
+        <p className="text-gray-500">최근 14일 내 데이터가 없습니다.</p>
       ) : (
         <div className="bg-gray-50 p-4 rounded-lg shadow">
           <p className="whitespace-pre-line text-sm leading-relaxed">
