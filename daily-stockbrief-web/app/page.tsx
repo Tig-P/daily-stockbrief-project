@@ -24,74 +24,50 @@ type ThemeData = {
   body: string;
 }[];
 
-function formatPrice(price: string | undefined) {
-  if (!price) return "-";
-  const num = parseInt(price.replace(/[^0-9]/g, ""), 10);
-  if (isNaN(num)) return price;
-  return num.toLocaleString("ko-KR");
-}
-
-function getChangeColor(change: string | undefined) {
-  if (!change) return "text-gray-700";
-  if (change.startsWith("+")) return "text-red-500";
-  if (change.startsWith("-")) return "text-blue-500";
-  return "text-gray-700";
-}
-
-function getArrow(change: string | undefined) {
-  if (!change) return "";
-  if (change.startsWith("+")) return "▲";
-  if (change.startsWith("-")) return "▼";
-  return "";
-}
-
 export default function Home() {
+  const [latestDate, setLatestDate] = useState<string | null>(null);
   const [gainers, setGainers] = useState<GainerData>([]);
-  const [themes, setThemes] = useState<ThemeData[]>([]);
-  const [dateUsed, setDateUsed] = useState<string>(""); // 실제 표시할 날짜
+  const [themes, setThemes] = useState<ThemeData>([]);
   const [openCharts, setOpenCharts] = useState<string[]>([]);
 
+  // 📌 최신 날짜 불러오기
   useEffect(() => {
-    const tryDates = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split("T")[0];
-    });
-
-    const fetchData = async () => {
-      for (const date of tryDates) {
-        try {
-          const gainersRes = await fetch(`/data/${date}/infostock_gainers.json`);
-          const themesRes = await fetch(`/data/${date}/infostock_themes.json`);
-
-          if (gainersRes.ok || themesRes.ok) {
-            if (gainersRes.ok) setGainers(await gainersRes.json());
-            if (themesRes.ok) setThemes(await themesRes.json());
-            setDateUsed(date);
-            return;
+    const fetchLatest = async () => {
+      try {
+        const res = await fetch("/data/index.json");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.dates?.length > 0) {
+            setLatestDate(data.dates[0]); // 최신 날짜
           }
-        } catch (err) {
-          console.error("데이터 로드 실패:", err);
         }
+      } catch (e) {
+        console.error("index.json 로드 실패", e);
       }
     };
-
-    fetchData();
+    fetchLatest();
   }, []);
 
+  // 📌 데이터 불러오기
   useEffect(() => {
-    const saved = localStorage.getItem("openCharts");
-    if (saved) setOpenCharts(JSON.parse(saved));
-  }, []);
+    if (!latestDate) return;
+    const fetchData = async () => {
+      try {
+        const gRes = await fetch(`/data/${latestDate}/infostock_gainers.json`);
+        if (gRes.ok) setGainers(await gRes.json());
+
+        const tRes = await fetch(`/data/${latestDate}/infostock_themes.json`);
+        if (tRes.ok) setThemes(await tRes.json());
+      } catch (e) {
+        console.error("데이터 로드 실패", e);
+      }
+    };
+    fetchData();
+  }, [latestDate]);
 
   const toggleChart = (code: string) => {
     setOpenCharts((prev) => {
-      let updated;
-      if (prev.includes(code)) {
-        updated = prev.filter((c) => c !== code);
-      } else {
-        updated = [...prev, code];
-      }
+      const updated = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
       localStorage.setItem("openCharts", JSON.stringify(updated));
       return updated;
     });
@@ -99,72 +75,50 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto">
-      <p className="text-sm text-gray-500 mb-2 text-center">
-        ⏰ 본 데이터는 매일 장 마감 후 17:00~18:00 사이 자동 업데이트됩니다.
-      </p>
-      <h1 className="text-3xl font-extrabold mb-6 text-center">
-        📅 {dateUsed || "최근 데이터"} 장 마감 브리핑
+      <p className="text-sm text-gray-500 mb-2">⏱ 매일 17:20~18:00 업데이트</p>
+      <h1 className="text-3xl font-bold mb-4">
+        📅 {latestDate ?? "데이터 없음"} 장 마감 브리핑
       </h1>
 
       <h2 className="text-2xl font-bold mb-6">📈 상한가 및 급등주</h2>
-
       {gainers.length === 0 ? (
-        <p className="text-gray-500">최근 14일 내 데이터가 없습니다.</p>
+        <p className="text-gray-500">데이터가 없습니다.</p>
       ) : (
         gainers[0].items.map((item, i) => (
-          <div key={i} className="border-b border-gray-200 py-5">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">
-                {item.name} ({item.code})
-              </h3>
-              <span
-                className={`text-sm font-bold ${getChangeColor(item.change)}`}
-              >
-                {formatPrice(item.price)}원 {getArrow(item.change)}
-                {item.change ?? ""}
+          <div key={i} className="border-b py-4">
+            <div className="flex justify-between">
+              <span className="font-semibold">{item.name} ({item.code})</span>
+              <span className={`text-sm ${item.change?.startsWith("+") ? "text-red-500" : "text-blue-500"}`}>
+                {item.price || "-"} {item.change || ""}
               </span>
             </div>
+            <p className="text-gray-700 text-sm">{item.reason}</p>
 
-            <p className="text-sm text-gray-700 mt-1">{item.reason}</p>
-
-            <div className="flex gap-2 mt-3">
-              <a
-                href={`https://finance.naver.com/item/main.naver?code=${item.code}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-green-500 text-white px-3 py-1 rounded-md text-xs hover:bg-green-600"
-              >
+            <div className="flex gap-2 mt-2">
+              <a href={`https://finance.naver.com/item/main.naver?code=${item.code}`} target="_blank" className="bg-green-500 text-white px-2 py-1 rounded">
                 네이버 금융
               </a>
-              <button
-                onClick={() => toggleChart(item.code)}
-                className="bg-blue-500 text-white px-3 py-1 rounded-md text-xs hover:bg-blue-600"
-              >
+              <button onClick={() => toggleChart(item.code)} className="bg-blue-500 text-white px-2 py-1 rounded">
                 {openCharts.includes(item.code) ? "차트 닫기" : "차트 보기"}
               </button>
             </div>
 
             {openCharts.includes(item.code) && (
-              <div className="mt-3">
-                <iframe
-                  src={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
-                  title={`${item.name} 차트`}
-                  className="w-full h-80 border rounded-md"
-                />
-              </div>
+              <iframe
+                src={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
+                className="w-full h-80 mt-2 border rounded"
+              />
             )}
           </div>
         ))
       )}
 
-      <h2 className="text-2xl font-bold mt-10 mb-4">📝 특징 테마</h2>
+      <h2 className="text-2xl font-bold mt-8 mb-4">📝 특징 테마</h2>
       {themes.length === 0 ? (
-        <p className="text-gray-500">최근 14일 내 데이터가 없습니다.</p>
+        <p className="text-gray-500">데이터가 없습니다.</p>
       ) : (
-        <div className="bg-gray-50 p-4 rounded-lg shadow">
-          <p className="whitespace-pre-line text-sm leading-relaxed">
-            {themes[0].body}
-          </p>
+        <div className="bg-gray-50 p-4 rounded shadow">
+          <p className="whitespace-pre-line">{themes[0].body}</p>
         </div>
       )}
     </main>

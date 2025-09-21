@@ -2,8 +2,8 @@ name: Scrape and Deploy
 
 on:
   schedule:
-    - cron: "20 8 * * *"  # 한국 시간 매일 17:20 (UTC 08:20)
-  workflow_dispatch:       # GitHub Actions에서 수동 실행 가능
+    - cron: "20 8 * * *"  # 매일 한국시간 17:20 실행 (UTC+9 → UTC 08:20)
+  workflow_dispatch:       # GitHub Actions 탭에서 수동 실행 가능
 
 jobs:
   scrape:
@@ -17,15 +17,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # 선택: 캐시 추가 → 실행 속도 향상
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
@@ -42,7 +33,12 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add daily-stockbrief-web/public/data/* || echo "No changes"
+          git add daily-stockbrief-web/public/data || echo "No changes"
           git commit -m "Auto-update data $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git pull --rebase origin main || echo "No rebase needed"
-          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
+      - name: Trigger Vercel Deploy
+        run: |
+          curl -X POST "https://api.vercel.com/v1/integrations/deploy/prj_XXXXXX" \
+          -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" || echo "Vercel redeploy skipped"
