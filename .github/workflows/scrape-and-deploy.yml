@@ -40,5 +40,5 @@ jobs:
 
       - name: Trigger Vercel Deploy
         run: |
-          curl -X POST "https://api.vercel.com/v1/integrations/deploy/prj_XXXXXX" \
+          curl -X POST "https://api.vercel.com/v1/integrations/deploy/prj_1owM8Ih4nQCzd1yAp7JTj17YzXN2" \
           -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" || echo "Vercel redeploy skipped"
