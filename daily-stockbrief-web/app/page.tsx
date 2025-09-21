@@ -80,9 +80,12 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto">
-      <h2 className="text-center text-sm text-gray-400 mb-2">
-        장마감 후 오후 5~6시 사이 업데이트됩니다
-      </h2>
+      {/* 업데이트 안내 + Contact */}
+      <div className="flex justify-center items-center text-center text-sm text-gray-400 mb-2 space-x-4">
+        <span>장마감 후 오후 5~6시 사이 업데이트됩니다</span>
+        <span>Contact: enomme@naver.com</span>
+      </div>
+
       <h1 className="text-3xl font-bold text-center mb-8">
         📅 {dateFolder || "로딩중..."} 장 마감 브리핑
       </h1>
@@ -132,8 +135,8 @@ export default function Home() {
                 <div className="mt-3 w-full overflow-auto border rounded-lg shadow" style={{ maxHeight: 500 }}>
                   <iframe
                     src={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
-                    width={1200} // 충분히 넓게 잡아 좌우 스크롤 가능
-                    height={600} // iframe 높이를 600px로 늘려 위/아래 스크롤 가능
+                    width={1200}
+                    height={600}
                     frameBorder="0"
                     scrolling="yes"
                     className="rounded-lg"
