@@ -1,129 +1,128 @@
-"use client";
+// app/pages/index.tsx 또는 pages/index.tsx
+import fs from "fs";
+import path from "path";
 
-import { useEffect, useState } from "react";
-
-type GainerItem = {
+interface GainerItem {
   name: string;
   code: string;
   price: string;
   change: string;
   reason: string;
+}
+
+interface ThemeItem {
+  title: string;
+  body: string;
+}
+
+interface DataProps {
+  gainers: GainerItem[];
+  themes: ThemeItem[];
+  date: string | null;
+}
+
+const WEB_DATA_PATH = path.join(process.cwd(), "public", "data");
+
+export const getServerSideProps = async () => {
+  const indexPath = path.join(WEB_DATA_PATH, "index.json");
+  let latestDate = "";
+
+  try {
+    const indexRaw = fs.readFileSync(indexPath, "utf-8");
+    latestDate = JSON.parse(indexRaw).latestDate;
+  } catch {
+    console.warn("[WARN] index.json 읽기 실패");
+    return { props: { gainers: [], themes: [], date: null } };
+  }
+
+  let dateToCheck = latestDate;
+  let gainers: GainerItem[] = [];
+  let themes: ThemeItem[] = [];
+
+  const findExistingJson = (): boolean => {
+    let attempts = 14; // 최대 14일 전까지 탐색
+    while (attempts > 0) {
+      const todayDir = path.join(WEB_DATA_PATH, dateToCheck);
+      const gPath = path.join(todayDir, "infostock_gainers.json");
+      const tPath = path.join(todayDir, "infostock_themes.json");
+
+      if (fs.existsSync(gPath) || fs.existsSync(tPath)) {
+        if (fs.existsSync(gPath)) {
+          gainers = JSON.parse(fs.readFileSync(gPath, "utf-8"));
+        }
+        if (fs.existsSync(tPath)) {
+          themes = JSON.parse(fs.readFileSync(tPath, "utf-8"));
+        }
+        return true;
+      }
+
+      // 하루 전으로 이동
+      const [y, m, d] = dateToCheck.split("-").map(Number);
+      const prevDate = new Date(y, m - 1, d - 1);
+      dateToCheck = prevDate.toISOString().slice(0, 10);
+      attempts--;
+    }
+    return false;
+  };
+
+  const found = findExistingJson();
+  if (!found) {
+    console.warn("[INFO] 유효한 JSON을 찾지 못함");
+    return { props: { gainers: [], themes: [], date: null } };
+  }
+
+  return { props: { gainers, themes, date: dateToCheck } };
 };
 
-type GainerData = {
-  title: string;
-  url: string;
-  date: string;
-  items: GainerItem[];
-}[];
-
-type ThemeData = {
-  title: string;
-  url: string;
-  date: string;
-  body: string;
-}[];
-
-export default function Home() {
-  const [gainers, setGainers] = useState<GainerData>([]);
-  const [themes, setThemes] = useState<ThemeData>([]);
-  const [dateFolder, setDateFolder] = useState<string>("");
-
-  // 🔥 최근 날짜 폴더를 먼저 가져옴
-  useEffect(() => {
-    const fetchLatestDate = async () => {
-      try {
-        const res = await fetch("/data/index.json");
-        if (!res.ok) {
-          console.warn("[WARN] index.json 로드 실패");
-          return;
-        }
-        const dates: string[] = await res.json();
-        if (dates.length > 0) {
-          setDateFolder(dates[dates.length - 1]); // 가장 최근 날짜 선택
-        }
-      } catch (err) {
-        console.error("날짜 인덱스 로드 실패:", err);
-      }
-    };
-    fetchLatestDate();
-  }, []);
-
-  // 🔥 최근 날짜 폴더에서 JSON 로드
-  useEffect(() => {
-    if (!dateFolder) return;
-    const fetchData = async () => {
-      try {
-        const gainersRes = await fetch(`/data/${dateFolder}/infostock_gainers.json`);
-        if (gainersRes.ok) setGainers(await gainersRes.json());
-
-        const themesRes = await fetch(`/data/${dateFolder}/infostock_themes.json`);
-        if (themesRes.ok) setThemes(await themesRes.json());
-      } catch (err) {
-        console.error("데이터 로드 실패:", err);
-      }
-    };
-    fetchData();
-  }, [dateFolder]);
+export default function Home({ gainers, themes, date }: DataProps) {
+  if (!date) return <div>데이터가 없습니다.</div>;
 
   return (
-    <main className="p-6 max-w-6xl mx-auto">
-      <h2 className="text-center text-sm text-gray-400 mb-2">
-        장마감 후 오후 5~6시 사이 업데이트됩니다
-      </h2>
-      <h1 className="text-3xl font-bold text-center mb-8">
-        📅 {dateFolder || "로딩중..."} 장 마감 브리핑
-      </h1>
+    <div style={{ padding: "1rem" }}>
+      <h1>증시 요약 ({date})</h1>
 
-      {/* 상한가/급등주 */}
-      <h1 className="text-2xl font-bold mb-6">📈 상한가 및 급등주</h1>
-      {gainers.length === 0 ? (
-        <p className="text-gray-500">데이터가 없습니다.</p>
-      ) : (
-        gainers[0].items.map((item, i) => (
-          <div key={i} className="border-b border-gray-200 py-5">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">
-                {item.name} ({item.code})
-              </h2>
-              <span className="text-sm font-bold text-red-500">
-                {item.price} {item.change}
-              </span>
-            </div>
-            <p className="text-sm text-gray-700 mt-1">{item.reason}</p>
-            <div className="flex gap-2 mt-3">
-              <a
-                href={`https://finance.naver.com/item/main.naver?code=${item.code}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-green-500 text-white px-3 py-1 rounded-md text-xs hover:bg-green-600"
-              >
-                네이버 금융
-              </a>
-              <a
-                href={`https://finance.naver.com/item/fchart.naver?code=${item.code}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-blue-500 text-white px-3 py-1 rounded-md text-xs hover:bg-blue-600"
-              >
-                차트 보기
-              </a>
-            </div>
-          </div>
-        ))
+      {gainers && gainers.length > 0 && (
+        <section>
+          <h2>상한가 / 급등 종목</h2>
+          <table border={1} cellPadding={5} style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th>종목명</th>
+                <th>코드</th>
+                <th>가격</th>
+                <th>등락</th>
+                <th>사유</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gainers.map((item) => (
+                <tr key={item.code}>
+                  <td>{item.name}</td>
+                  <td>{item.code}</td>
+                  <td>{item.price}</td>
+                  <td>{item.change}</td>
+                  <td>{item.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       )}
 
-      {/* 특징 테마 */}
-      <h1 className="text-2xl font-bold mt-10 mb-4">📝 특징 테마</h1>
-      {themes.length === 0 ? (
-        <p className="text-gray-500">데이터가 없습니다.</p>
-      ) : (
-        <div className="bg-gray-50 p-4 rounded-lg shadow">
-          <p className="whitespace-pre-line text-sm leading-relaxed">
-            {themes[0].body}
-          </p>
-        </div>
+      {themes && themes.length > 0 && (
+        <section style={{ marginTop: "2rem" }}>
+          <h2>특징 테마</h2>
+          {themes.map((theme, idx) => (
+            <div key={idx} style={{ marginBottom: "1rem" }}>
+              <h3>{theme.title}</h3>
+              <pre style={{ whiteSpace: "pre-wrap" }}>{theme.body}</pre>
+            </div>
+          ))}
+        </section>
       )}
-    </main>
+
+      {(!gainers || gainers.length === 0) &&
+        (!themes || themes.length === 0) && <p>데이터가 없습니다.</p>}
+    </div>
   );
 }
