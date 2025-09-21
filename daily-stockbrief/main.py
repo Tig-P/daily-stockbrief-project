@@ -7,7 +7,6 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 BASE_URL = "https://stock.mk.co.kr/news/media/infostock"
 WEB_DATA_PATH = "../daily-stockbrief-web/public/data"  # Next.js public/data 경로
-INDEX_FILE = os.path.join(WEB_DATA_PATH, "index.json")
 
 # ---------- 유틸 ----------
 def today_markers() -> list[str]:
@@ -21,6 +20,8 @@ def clean_title(title: str) -> str:
     return re.sub(r"\s*\(증시요약\(\d+\)\)", "", title).strip()
 
 def to_abs(url: str) -> str:
+    if not url:
+        return ""
     return url if url.startswith("http") else f"https://stock.mk.co.kr{url}"
 
 # ---------- 공통: 기사 찾기 ----------
@@ -149,23 +150,6 @@ async def scrape_themes(context, url: str, date_str: str):
         "body": "\n".join(body_lines)
     }]
 
-# ---------- index.json 업데이트 ----------
-def update_index(date_str: str):
-    os.makedirs(WEB_DATA_PATH, exist_ok=True)
-    dates = []
-    if os.path.exists(INDEX_FILE):
-        with open(INDEX_FILE, "r", encoding="utf-8") as f:
-            try:
-                dates = json.load(f)
-            except json.JSONDecodeError:
-                dates = []
-    if date_str not in dates:
-        dates.append(date_str)
-    dates = sorted(dates)[-14:]  # 최근 14일만 유지
-    with open(INDEX_FILE, "w", encoding="utf-8") as f:
-        json.dump(dates, f, ensure_ascii=False, indent=2)
-    print(f"[INDEX] index.json 갱신 → {dates}")
-
 # ---------- 메인 ----------
 async def main():
     today_dash = datetime.now().strftime("%Y-%m-%d")
@@ -177,6 +161,7 @@ async def main():
         context = await browser.new_context()
         page = await context.new_page()
 
+        # (6) 상한가/급등종목
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         g_title, g_url = await find_today_article(context, page, ["증시요약(6)", "상한가", "급등"], max_pages=5)
         gainers = []
@@ -186,6 +171,7 @@ async def main():
         else:
             print("[WARN] 오늘자 (6) 상한가/급등 기사 미발견")
 
+        # (3) 특징 테마
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
         t_title, t_url = await find_today_article(context, page, ["증시요약(3)", "특징"], max_pages=5)
         themes = []
@@ -195,15 +181,26 @@ async def main():
         else:
             print("[WARN] 오늘자 (3) 특징 테마 기사 미발견")
 
-        with open(os.path.join(today_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
-            json.dump(gainers, f, ensure_ascii=False, indent=2)
-        with open(os.path.join(today_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
-            json.dump(themes, f, ensure_ascii=False, indent=2)
+        # 저장 (빈 데이터면 저장하지 않음)
+        if gainers and gainers[0]["items"]:
+            with open(os.path.join(today_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
+                json.dump(gainers, f, ensure_ascii=False, indent=2)
+            print(f"[SAVE] {len(gainers[0]['items'])}개 (상한가/급등) → {today_dir}")
+        else:
+            print("[INFO] 상한가/급등 데이터 없음 → 저장 생략")
 
-        print(f"[SAVE] 데이터 저장 완료 → {today_dir}")
+        if themes and themes[0]["body"]:
+            with open(os.path.join(today_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
+                json.dump(themes, f, ensure_ascii=False, indent=2)
+            print(f"[SAVE] 특징 테마 저장 완료 → {today_dir}")
+        else:
+            print("[INFO] 특징 테마 데이터 없음 → 저장 생략")
 
-        # index.json 갱신
-        update_index(today_dash)
+        # 최신 index.json 갱신
+        index_path = os.path.join(WEB_DATA_PATH, "index.json")
+        with open(index_path, "w", encoding="utf-8") as idx:
+            json.dump({"latestDate": today_dash}, idx, ensure_ascii=False, indent=2)
+        print(f"[INDEX] latestDate → {today_dash} 갱신 완료")
 
         await browser.close()
 
