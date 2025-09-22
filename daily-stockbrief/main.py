@@ -26,7 +26,7 @@ def to_abs(url: str) -> str:
 
 # ---------- 공통: 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
-    """오늘 날짜의 증시요약 기사를 찾는다."""
+    """오늘 날짜의 증시요약 기사를 찾는다 (날짜 숫자만 보고 느슨 매칭, 과거 기사만 reject)."""
     marks = today_markers()
     today_dash = datetime.now().strftime("%Y-%m-%d")
     page = start_page
@@ -61,24 +61,48 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
 
                 print(f"[DEBUG] 날짜텍스트: {date_txt}")
 
-                # 날짜 비교: 연/월/일만 추출
+                # 날짜 숫자만 뽑아서 비교
                 date_digits = re.findall(r"\d+", date_txt)
                 date_only = ""
                 if len(date_digits) >= 3:
                     date_only = f"{date_digits[0]}-{date_digits[1].zfill(2)}-{date_digits[2].zfill(2)}"
 
-                if date_only == today_dash or any(mark in date_txt for mark in marks):
-                    print(f"[INFO] ✅ 오늘 기사 발견 → {raw_title}")
+                # 숫자 없으면 무조건 accept
+                if not date_digits:
+                    print("[DEBUG] 날짜 숫자 없음 → 기사 채택")
                     await news.close()
                     return clean_title(raw_title), url
-                else:
-                    print(f"[DEBUG] ❌ 오늘 날짜 아님: {date_only}")
+
+                # 오늘 날짜면 확정 accept
+                if date_only == today_dash or any(mark in date_txt for mark in marks):
+                    print(f"[INFO] ✅ 오늘 기사 확정 → {raw_title}")
+                    await news.close()
+                    return clean_title(raw_title), url
+
+                # 과거 기사면 reject
+                try:
+                    article_date = datetime.strptime(date_only, "%Y-%m-%d")
+                    today = datetime.strptime(today_dash, "%Y-%m-%d")
+                    if article_date < today:
+                        print(f"[WARN] 과거 기사 → reject: {date_only}")
+                        await news.close()
+                        continue
+                except Exception:
+                    print(f"[DEBUG] 날짜 파싱 실패 → 기사 채택")
+                    await news.close()
+                    return clean_title(raw_title), url
+
+                # 날짜 다르지만 미래거나 파싱 성공 → 그냥 accept
+                print(f"[WARN] 날짜 불일치 ({date_only}), 그래도 기사 채택")
+                await news.close()
+                return clean_title(raw_title), url
+
             except PlaywrightTimeoutError:
                 print(f"[WARN] 페이지 로딩 타임아웃: {url}")
             finally:
                 await news.close()
 
-        # 다음 페이지로 이동
+        # 다음 페이지 이동
         next_btn = page.locator("a.next, a.paging_next, a:has-text('다음')")
         if page_no == max_pages or await next_btn.count() == 0:
             print(f"[DEBUG] 다음 페이지 없음 → 검색 종료")
