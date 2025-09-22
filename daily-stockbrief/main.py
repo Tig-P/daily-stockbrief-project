@@ -26,9 +26,13 @@ def to_abs(url: str) -> str:
 
 # ---------- 공통: 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
+    """오늘 날짜의 증시요약 기사를 찾는다."""
     marks = today_markers()
+    today_dash = datetime.now().strftime("%Y-%m-%d")
     page = start_page
+
     for page_no in range(1, max_pages + 1):
+        print(f"[DEBUG] 🔎 {page_no}페이지 검색 시작")
         anchors = await page.locator("a").all()
         candidates = []
         for a in anchors:
@@ -41,7 +45,10 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
             except Exception:
                 continue
 
+        print(f"[DEBUG] 후보 기사 {len(candidates)}개 발견")
+
         for raw_title, url in candidates:
+            print(f"[DEBUG] 검사중: {raw_title} ({url})")
             news = await context.new_page()
             try:
                 await news.goto(url, wait_until="domcontentloaded", timeout=45000)
@@ -51,20 +58,35 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
                     date_txt = (await date_loc.first.inner_text(timeout=5000)).strip()
                 except Exception:
                     pass
-                if any(mark in date_txt for mark in marks):
+
+                print(f"[DEBUG] 날짜텍스트: {date_txt}")
+
+                # 날짜 비교: 연/월/일만 추출
+                date_digits = re.findall(r"\d+", date_txt)
+                date_only = ""
+                if len(date_digits) >= 3:
+                    date_only = f"{date_digits[0]}-{date_digits[1].zfill(2)}-{date_digits[2].zfill(2)}"
+
+                if date_only == today_dash or any(mark in date_txt for mark in marks):
+                    print(f"[INFO] ✅ 오늘 기사 발견 → {raw_title}")
                     await news.close()
                     return clean_title(raw_title), url
+                else:
+                    print(f"[DEBUG] ❌ 오늘 날짜 아님: {date_only}")
             except PlaywrightTimeoutError:
-                pass
+                print(f"[WARN] 페이지 로딩 타임아웃: {url}")
             finally:
                 await news.close()
 
+        # 다음 페이지로 이동
         next_btn = page.locator("a.next, a.paging_next, a:has-text('다음')")
         if page_no == max_pages or await next_btn.count() == 0:
+            print(f"[DEBUG] 다음 페이지 없음 → 검색 종료")
             break
         await next_btn.first.click()
-        await page.wait_for_load_state("load")
+        await page.wait_for_load_state("networkidle")  # ajax 로딩 대응
 
+    print(f"[WARN] ❌ 오늘자 기사 못 찾음")
     return None, None
 
 # ---------- (6) 상한가/급등종목 ----------
@@ -163,7 +185,7 @@ async def main():
 
         # (6) 상한가/급등종목
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
-        g_title, g_url = await find_today_article(context, page, ["증시요약(6)", "상한가", "급등"], max_pages=5)
+        g_title, g_url = await find_today_article(context, page, ["증시요약(6)"], max_pages=5)
         gainers = []
         if g_url:
             print(f"[INFO] (6) 오늘 기사: {g_title} -> {g_url}")
@@ -173,7 +195,7 @@ async def main():
 
         # (3) 특징 테마
         await page.goto(BASE_URL, wait_until="load", timeout=60000)
-        t_title, t_url = await find_today_article(context, page, ["증시요약(3)", "특징"], max_pages=5)
+        t_title, t_url = await find_today_article(context, page, ["증시요약(3)"], max_pages=5)
         themes = []
         if t_url:
             print(f"[INFO] (3) 오늘 기사: {t_title} -> {t_url}")
@@ -181,7 +203,7 @@ async def main():
         else:
             print("[WARN] 오늘자 (3) 특징 테마 기사 미발견")
 
-        # 저장 (빈 데이터면 저장하지 않음)
+        # 저장
         if gainers and gainers[0]["items"]:
             with open(os.path.join(today_dir, "infostock_gainers.json"), "w", encoding="utf-8") as f:
                 json.dump(gainers, f, ensure_ascii=False, indent=2)
