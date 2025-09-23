@@ -2,7 +2,7 @@ name: Scrape and Deploy
 
 on:
   schedule:
-    - cron: "20 8 * * *"  # 매일 한국시간 17:20 실행 (UTC+9 → UTC 08:20)
+    - cron: "30 8 * * *"  # 매일 한국시간 17:30 실행 (UTC+9 → UTC 08:30)
   workflow_dispatch:       # GitHub Actions 탭에서 수동 실행 가능
 
 jobs:
