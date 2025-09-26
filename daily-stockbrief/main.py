@@ -8,6 +8,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 BASE_URL = "https://stock.mk.co.kr/news/media/infostock"
 WEB_DATA_PATH = "../daily-stockbrief-web/public/data"
 
+
 # ---------- 유틸 ----------
 def today_markers() -> list[str]:
     now = datetime.now()
@@ -16,13 +17,16 @@ def today_markers() -> list[str]:
     d = f"{now.day:02d}"
     return [f"{y}-{m}-{d}", f"{y}.{m}.{d}", f"{y}/{m}/{d}"]
 
+
 def clean_title(title: str) -> str:
     return re.sub(r"\s*\(증시요약\(\d+\)\)", "", title).strip()
+
 
 def to_abs(url: str) -> str:
     if not url:
         return ""
     return url if url.startswith("http") else f"https://stock.mk.co.kr{url}"
+
 
 # ---------- 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
@@ -80,6 +84,7 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
         await page.wait_for_load_state("networkidle")
     return None, None
 
+
 # ---------- 상한가/급등종목 ----------
 async def scrape_gainers(context, url: str, date_str: str):
     page = await context.new_page()
@@ -109,11 +114,14 @@ async def scrape_gainers(context, url: str, date_str: str):
                 except Exception:
                     pass
             if name and code and reason:
-                items.append({"name": name, "code": code, "price": price, "change": change, "reason": reason})
+                items.append(
+                    {"name": name, "code": code, "price": price, "change": change, "reason": reason}
+                )
         except Exception:
             continue
     await page.close()
     return [{"title": "상한가/급등종목", "url": url, "date": date_str, "items": items}]
+
 
 # ---------- 특징 테마 ----------
 async def scrape_themes(context, url: str, date_str: str):
@@ -140,6 +148,7 @@ async def scrape_themes(context, url: str, date_str: str):
                 continue
     await page.close()
     return [{"title": "특징 테마", "url": url, "date": date_str, "body": "\n".join(body_lines)}]
+
 
 # ---------- 메인 ----------
 async def main():
@@ -183,14 +192,16 @@ async def main():
 
             # 오늘 gainers[0]["items"] 전체 append
             for item in gainers[0]["items"]:
-                master_data.append({
-                    "date": today_dash,
-                    "name": item["name"],
-                    "code": item["code"],
-                    "price": item["price"],
-                    "change": item["change"],
-                    "reason": item["reason"]
-                })
+                master_data.append(
+                    {
+                        "date": today_dash,
+                        "name": item["name"],
+                        "code": item["code"],
+                        "price": item["price"],
+                        "change": item["change"],
+                        "reason": item["reason"],
+                    }
+                )
 
             with open(master_path, "w", encoding="utf-8") as f:
                 json.dump(master_data, f, ensure_ascii=False, indent=2)
@@ -202,13 +213,37 @@ async def main():
                 json.dump(themes, f, ensure_ascii=False, indent=2)
             print(f"[SAVE] 특징 테마 저장 완료 → {today_dir}")
 
-        # 최신 index.json 갱신
+        # ---------- 최신 index.json 갱신 (오늘 뉴스 없으면 fallback) ----------
         index_path = os.path.join(WEB_DATA_PATH, "index.json")
+
+        # 오늘 뉴스 존재 여부 확인
+        today_has_news = (gainers and gainers[0]["items"]) or (themes and themes[0]["body"])
+
+        if today_has_news:
+            latest_date_str = today_dash
+            print(f"[INDEX] 오늘 뉴스 존재 → latestDate 갱신: {latest_date_str}")
+        else:
+            # 오늘 뉴스 없으면 실제 존재하는 가장 최신 날짜로 fallback
+            existing_dirs = [
+                d
+                for d in os.listdir(WEB_DATA_PATH)
+                if os.path.isdir(os.path.join(WEB_DATA_PATH, d))
+                and re.match(r"\d{4}-\d{2}-\d{2}", d)
+            ]
+            if existing_dirs:
+                latest_date = max(datetime.strptime(d, "%Y-%m-%d") for d in existing_dirs)
+                latest_date_str = latest_date.strftime("%Y-%m-%d")
+                print(f"[INDEX] 오늘 뉴스 없음 → fallback latestDate: {latest_date_str}")
+            else:
+                latest_date_str = today_dash
+                print(f"[INDEX] 데이터 폴더 없음 → latestDate 기본: {latest_date_str}")
+
+        # index.json에 기록
         with open(index_path, "w", encoding="utf-8") as idx:
-            json.dump({"latestDate": today_dash}, idx, ensure_ascii=False, indent=2)
-        print(f"[INDEX] latestDate → {today_dash} 갱신 완료")
+            json.dump({"latestDate": latest_date_str}, idx, ensure_ascii=False, indent=2)
 
         await browser.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
