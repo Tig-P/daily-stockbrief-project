@@ -32,7 +32,7 @@ export default function Home() {
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-  // 최근 날짜 폴더 가져오기
+    // 최근 날짜 폴더 가져오기
   useEffect(() => {
     const fetchLatestDate = async () => {
       try {
@@ -77,7 +77,7 @@ export default function Home() {
   const toggleChart = (code: string) => {
     setExpandedChart((prev) => ({ ...prev, [code]: !prev[code] }));
   };
-
+  
   return (
     <main className="p-6 max-w-6xl mx-auto">
       {/* 업데이트 안내 + Contact */}
