@@ -30,7 +30,6 @@ def to_abs(url: str) -> str:
 
 # ---------- 기사 찾기 ----------
 async def find_today_article(context, start_page, required_subs: list[str], max_pages: int = 5):
-    """오늘 날짜의 증시요약 기사를 찾는다."""
     marks = today_markers()
     today_dash = datetime.now().strftime("%Y-%m-%d")
     page = start_page
@@ -86,17 +85,80 @@ async def find_today_article(context, start_page, required_subs: list[str], max_
             finally:
                 await news.close()
 
-        # 다음 페이지 이동
         next_btn = page.locator("a.next, a.paging_next, a:has-text('다음')")
         if page_no == max_pages or await next_btn.count() == 0:
             break
         await next_btn.first.click()
-        await page.wait_for_load_state("domcontentloaded")  # networkidle 대신 안정화
+        await page.wait_for_load_state("domcontentloaded")
 
     return None, None
 
 
-# ---------- 상한가/급등종목 ----------
+async def scrape_stock_info(context, code: str):
+    import re
+    def _norm(s: str) -> str:
+        return re.sub(r"\s+", " ", s).strip()
+
+    url = f"https://finance.naver.com/item/main.naver?code={code}"
+    page = await context.new_page()
+    await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
+    trading_value, market_cap, listed_shares = "", "", ""
+
+    # ----- 거래대금 -----
+    try:
+        # iframe 탐색 (종목에 따라 다를 수 있음)
+        target_frame = None
+        for f in page.frames:
+            try:
+                if await f.locator("td:has(span.sptxt:has-text('거래대금'))").count() > 0:
+                    target_frame = f
+                    break
+            except:
+                continue
+        q = target_frame if target_frame else page
+
+        cell = q.locator("td:has(span.sptxt:has-text('거래대금'))").first
+
+        # blind 값 우선
+        try:
+            values = await cell.locator("em span.blind").all_inner_texts()
+            if values and values[0].strip():
+                value = values[0].strip()
+                unit = await q.locator("td:has(span.sptxt:has-text('거래대금')) span.sptxt.sp_txt11").first.inner_text()
+                trading_value = f"{value} {unit.strip()}"
+            else:
+                raise Exception("blind empty")
+        except:
+            # blind 없거나 비어있으면 em 전체 fallback
+            try:
+                val2 = await cell.locator("em").inner_text()
+                unit = await q.locator("td:has(span.sptxt:has-text('거래대금')) span.sptxt.sp_txt11").first.inner_text()
+                trading_value = f"{_norm(val2)} {unit.strip()}"
+            except:
+                trading_value = ""
+    except:
+        trading_value = ""
+
+    # ----- 시가총액 -----
+    try:
+        mc = await page.locator("em#_market_sum").first.inner_text()
+        market_cap = _norm(mc) + "억원"
+    except:
+        pass
+
+    # ----- 상장주식수 -----
+    try:
+        ls = await page.locator("th:has-text('상장주식수') + td em").first.inner_text()
+        listed_shares = _norm(ls)
+    except:
+        pass
+
+    await page.close()
+    return trading_value, market_cap, listed_shares
+
+
+# ---------- 상한가/급등종목 (뉴스에서 기본만) ----------
 async def scrape_gainers(context, url: str, date_str: str):
     page = await context.new_page()
     await page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -206,7 +268,15 @@ async def main():
         if t_url:
             themes = await scrape_themes(context, t_url, today_dash)
 
-        # 오늘 데이터가 있을 때만 master.json 생성/누적
+        # -------- 종목별 상세 정보 보강 --------
+        if gainers and gainers[0]["items"]:
+            for item in gainers[0]["items"]:
+                trading_value, market_cap, listed_shares = await scrape_stock_info(context, item["code"])
+                item["trading_value"] = trading_value
+                item["market_cap"] = market_cap
+                item["listed_shares"] = listed_shares
+
+        # master.json 누적
         if gainers and gainers[0]["items"]:
             master_path = os.path.join(WEB_DATA_PATH, "master.json")
             if os.path.exists(master_path):
@@ -222,7 +292,10 @@ async def main():
                     "code": item["code"],
                     "price": item["price"],
                     "change": item["change"],
-                    "reason": item["reason"]
+                    "reason": item["reason"],
+                    "trading_value": item.get("trading_value", ""),
+                    "market_cap": item.get("market_cap", ""),
+                    "listed_shares": item.get("listed_shares", "")
                 })
 
             with open(master_path, "w", encoding="utf-8") as f:
@@ -237,7 +310,7 @@ async def main():
             with open(os.path.join(today_dir, "infostock_themes.json"), "w", encoding="utf-8") as f:
                 json.dump(themes, f, ensure_ascii=False, indent=2)
 
-        # index.json 갱신 (뉴스 없어도 안정적)
+        # index.json 갱신
         index_path = os.path.join(WEB_DATA_PATH, "index.json")
         existing_dirs = [
             d for d in os.listdir(WEB_DATA_PATH)
@@ -257,5 +330,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-    
