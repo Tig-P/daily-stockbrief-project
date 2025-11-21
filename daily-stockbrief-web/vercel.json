@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://www.stockessence.co.kr/$1",
+      "permanent": true
+    }
+  ]
+}
