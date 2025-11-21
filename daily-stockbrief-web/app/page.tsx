@@ -82,7 +82,7 @@ export default function Home() {
     <main className="p-6 max-w-6xl mx-auto">
       {/* 업데이트 안내 + Contact */}
       <div className="flex justify-center items-center text-center text-sm text-gray-400 mb-2 space-x-4">
-        <span>장마감 후 오후 5~6시 사이 업데이트됩니다</span>
+        <span>장마감 후 오후 5시 45분~6시 사이 업데이트됩니다</span>
         <span>Contact: enomme@naver.com</span>
       </div>
 
