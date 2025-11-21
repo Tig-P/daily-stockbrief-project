@@ -4,9 +4,8 @@ on:
   schedule:
     # 매일 한국시간 17:15 (UTC 08:15)
     - cron: "15 8 * * *"
-  workflow_dispatch:  # Actions 탭에서 수동 실행도 가능
+  workflow_dispatch:
 
-# git push 를 위해 필요
 permissions:
   contents: write
 
@@ -18,7 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # 이전 히스토리까지 포함해서 받아야 rebase/push가 안정적
           fetch-depth: 0
 
       - name: Set up Python
@@ -26,33 +24,35 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # 프로젝트 의존성 설치 (requirements 파일 쓰고 있으면 아래 줄 유지)
-          pip install -r daily-stockbrief/requirements.txt
-          python -m pip install playwright
-          python -m playwright install --with-deps chromium
+      # ✅ uv 설치 (공식 액션)
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
 
-      - name: Run scraper
+      # ✅ uv로 의존성 설치
+      - name: Install dependencies (uv)
+        working-directory: daily-stockbrief   # pyproject.toml 있는 폴더
         run: |
-          cd daily-stockbrief
-          python main.py
+          uv sync --frozen
+          uv run playwright install --with-deps chromium
+
+      # ✅ uv 환경에서 스크래퍼 실행
+      - name: Run scraper
+        working-directory: daily-stockbrief
+        run: |
+          uv run python main.py
 
       - name: Commit & Push scraped data
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 원격(main) 먼저 최신으로 맞추기
           git pull --rebase origin main || echo "No rebase needed"
 
-          # 웹 데이터 폴더만 커밋 대상
           git add daily-stockbrief-web/public/data || echo "Nothing to add"
-
           git commit -m "Auto-update data $(date +'%Y-%m-%d')" || echo "No changes to commit"
-
-          # 변경 사항이 있을 때만 push 성공
           git push origin HEAD:main || echo "Nothing to push"
 
       - name: Trigger Vercel Deploy
