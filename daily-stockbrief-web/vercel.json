@@ -1,8 +1,14 @@
 {
   "redirects": [
     {
-      "source": "/(.*)",
-      "destination": "https://www.stockessence.co.kr/$1",
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "dailystock.vercel.app"
+        }
+      ],
+      "destination": "https://www.stockessence.co.kr/:path*",
       "permanent": true
     }
   ]
