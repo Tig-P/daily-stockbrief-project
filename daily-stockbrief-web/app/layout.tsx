@@ -9,7 +9,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen">
+      <body
+        className="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen"
+        suppressHydrationWarning
+      >
         <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
