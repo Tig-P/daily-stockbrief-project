@@ -30,7 +30,9 @@ export default function AuthButton() {
   if (user) {
     return (
       <div className="flex items-center gap-4">
-        <span className="text-sm font-medium hidden md:block">{user.email}</span>
+        <span className="text-sm font-medium hidden md:block">
+          {user.email || user.user_metadata?.name || user.user_metadata?.full_name || '게스트'}
+        </span>
         <button
           onClick={handleLogout}
           className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium"
