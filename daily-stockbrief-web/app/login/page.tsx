@@ -103,14 +103,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => handleSocialLogin('google')}
-              className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-            >
-              <span className="sr-only">Google로 로그인</span>
-               Google
-            </button>
+          <div className="mt-6 grid grid-cols-1 gap-3">
             <button
               onClick={() => handleSocialLogin('kakao')}
               className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-[#FEE500] text-sm font-medium text-black hover:bg-[#FDD835]"
