@@ -36,6 +36,9 @@ export default function LoginPage() {
       provider,
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: provider === 'kakao' ? {
+          scope: 'profile_nickname,profile_image',
+        } : undefined,
       },
     })
     if (error) console.error('Error logging in:', error.message)
