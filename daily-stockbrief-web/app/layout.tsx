@@ -2,6 +2,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import AuthButton from "@/components/auth/AuthButton";
 
+import Script from "next/script";
+
 export default function RootLayout({
   children,
 }: {
@@ -13,6 +15,19 @@ export default function RootLayout({
         className="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen"
         suppressHydrationWarning
       >
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-NYKVRJ20B1"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-NYKVRJ20B1');
+          `}
+        </Script>
         <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
